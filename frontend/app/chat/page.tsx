@@ -9,9 +9,10 @@ import {
   User,
   ShieldCheck,
 } from "lucide-react";
+import { sendChatMessage, type ChatResponse } from "../../lib/api";
 
 type Message = {
-  id: number;
+  id: string;
   sender: "ai" | "user";
   text: string;
 };
@@ -21,35 +22,49 @@ export default function ChatPage() {
 
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: 1,
+      id: "welcome",
       sender: "ai",
       text: "Hello! I'm Citizen AI. I can help you understand government schemes, services, eligibility, and application procedures. How can I help you today?",
     },
   ]);
+  const [recommendations, setRecommendations] = useState<ChatResponse["recommended_schemes"]>([]);
+  const [followups, setFollowups] = useState<string[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const text = input.trim();
 
-    if (!text) return;
+    if (!text || isSending) return;
 
     const userMessage: Message = {
-      id: Date.now(),
+      id: `user-${Date.now()}`,
       sender: "user",
       text,
     };
 
     setMessages((current) => [...current, userMessage]);
     setInput("");
+    setError(null);
+    setIsSending(true);
 
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: Date.now() + 1,
-        sender: "ai",
-        text: "Thanks for your question. I'm currently in demo mode. Once the backend AI service is connected, I will provide detailed information about government services and eligibility.",
-      };
-
-      setMessages((current) => [...current, aiMessage]);
-    }, 700);
+    try {
+      const history = messages.map((message) => ({
+        role: message.sender === "ai" ? "assistant" : "user",
+        content: message.text,
+      }));
+      const result = await sendChatMessage(text, [...history, { role: "user", content: text }]);
+      setRecommendations(result.recommended_schemes ?? []);
+      setFollowups(result.suggested_followups ?? []);
+      setMessages((current) => [
+        ...current,
+        { id: `ai-${Date.now()}`, sender: "ai", text: result.response },
+      ]);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "The assistant is unavailable right now.");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (
@@ -145,7 +160,47 @@ export default function ChatPage() {
                 </div>
               </div>
             ))}
+            {isSending && (
+              <div className="text-sm text-slate-500">Citizen AI is checking the official scheme data...</div>
+            )}
           </div>
+
+          {(recommendations.length > 0 || followups.length > 0 || error) && (
+            <aside className="border-t bg-slate-50 p-4">
+              {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+              {recommendations.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">Relevant schemes</h2>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {recommendations.map((scheme) => (
+                      <Link
+                        key={`${scheme.id ?? scheme.title}`}
+                        href={scheme.application_url ?? "/services"}
+                        target={scheme.application_url ? "_blank" : undefined}
+                        className="rounded-lg border bg-white px-3 py-2 text-sm text-blue-700 hover:border-blue-400"
+                      >
+                        {scheme.title}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {followups.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {followups.map((followup) => (
+                    <button
+                      key={followup}
+                      type="button"
+                      onClick={() => setInput(followup)}
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-left text-xs text-blue-700 hover:bg-blue-100"
+                    >
+                      {followup}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </aside>
+          )}
 
           {/* Input */}
           <div className="border-t bg-white p-4">
@@ -155,12 +210,14 @@ export default function ChatPage() {
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={handleKeyDown}
+                disabled={isSending}
                 placeholder="Ask about a government scheme or service..."
                 className="flex-1 bg-transparent px-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
               />
 
               <button
                 onClick={sendMessage}
+                disabled={isSending}
                 className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-700"
                 aria-label="Send message"
               >

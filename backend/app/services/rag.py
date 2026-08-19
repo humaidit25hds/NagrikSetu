@@ -356,3 +356,32 @@ class RAGService:
             )
 
         return cards, sources
+
+    def retrieve_relevant_schemes(
+        self,
+        query: str,
+        demographics: Optional[UserDemographics] = None,
+        limit: int = 3
+    ) -> Dict[str, Any]:
+        """
+        High-level API: retrieves relevant schemes, builds context, and formats output.
+        Called by AIService for RAG enrichment.
+        """
+        # Search for matching schemes
+        matched = self.search_schemes(
+            query=query,
+            demographics=demographics,
+            limit=limit
+        )
+
+        # Build context for LLM
+        context = self.build_rag_prompt_context(matched)
+
+        # Format for API response
+        cards, sources = self.extract_cards_and_sources(matched)
+
+        return {
+            "schemes": cards,
+            "sources": sources,
+            "context": context
+        }

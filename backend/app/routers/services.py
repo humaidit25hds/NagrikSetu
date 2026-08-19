@@ -41,8 +41,15 @@ def list_services(
 
     services = query.all()
 
-    # Fallback to seed list if DB is empty
-    if not services and not search and not category:
+    # Fallback to the knowledge base when the database has no matching records.
+    if not services and (search or not category):
+        search_term = (search or "").lower().strip()
+        fallback_schemes = [
+            scheme for scheme in INDIAN_SCHEMES_KNOWLEDGE
+            if not search_term or search_term in " ".join(
+                str(value).lower() for value in scheme.values()
+            )
+        ]
         return [
             ServiceResponse(
                 id=s["id"],
@@ -62,7 +69,7 @@ def list_services(
                 helpline=s.get("helpline"),
                 is_active=True,
                 created_at=None
-            ) for s in INDIAN_SCHEMES_KNOWLEDGE
+            ) for s in fallback_schemes
         ]
 
     return services

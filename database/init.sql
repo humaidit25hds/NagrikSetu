@@ -109,4 +109,8 @@ CREATE INDEX IF NOT EXISTS idx_applications_service
 ON applications(service_id);
 
 CREATE INDEX IF NOT EXISTS idx_applications_status
-ON applications(status);
+ON applications(status);{
+  "status": "healthy",
+  "database": "connected",
+  "mongodb": "connected"
+}

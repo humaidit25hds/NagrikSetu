@@ -7,7 +7,8 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.database import engine, Base, SessionLocal
+from app.database import engine, Base, SessionLocal, check_database_connection
+from app.mongo import check_mongo_connection
 from app.models.service import Service
 from app.routers.chat import router as chat_router
 from app.routers.services import router as services_router
@@ -59,6 +60,9 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     # Seed initial civic knowledge
     seed_database()
+    mongo_status = check_mongo_connection()
+    if mongo_status["status"] == "unavailable":
+        print("Warning: MongoDB is configured but unavailable.")
     yield
 
 
@@ -104,11 +108,17 @@ def root():
 
 @app.get("/health", tags=["Health & Status"])
 def health_check():
+    database_status = check_database_connection()
+    mongo_status = check_mongo_connection()
+    mongo_ready = mongo_status.get("status") in {"connected", "not_configured"}
+    overall_status = "healthy" if database_status == "connected" and mongo_ready else "degraded"
+
     return {
-        "status": "healthy",
+        "status": overall_status,
         "service": settings.APP_NAME,
         "environment": settings.APP_ENV,
-        "database": "connected"
+        "database": database_status,
+        "mongodb": mongo_status,
     }
 
 
